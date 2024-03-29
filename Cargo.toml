@@ -1,12 +1,10 @@
 [package]
 name = "eth-keystore"
-version = "0.5.0"
-authors = ["Rohit Narurkar <rohit.narurkar@protonmail.com>"]
+version = "0.1.0"
 edition = "2018"
 license = "Apache-2.0"
 description = "A minimalist library to interact with encrypted JSON keystores"
-documentation = "https://docs.rs/eth-keystore"
-repository = "https://github.com/roynalnaruto/eth-keystore-rs"
+repository = "https://github.com/rumos-io/eth-keystore-rs"
 readme = "README.md"
 keywords = ["ethereum", "web3", "wallet"]
 exclude = ["tests/test-keys/*"]
