@@ -38,6 +38,7 @@ const DEFAULT_KDF_PARAMS_DKLEN: u8 = 32u8;
 const DEFAULT_KDF_PARAMS_LOG_N: u8 = 13u8;
 const DEFAULT_KDF_PARAMS_R: u32 = 8u32;
 const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
+const DEFAULT_KDF_LEN: usize = ScryptParams::RECOMMENDED_LEN; // This parameter is not used in the scrypt function, see https://github.com/RustCrypto/password-hashes/blob/f2b3d07499a39bfd999f9b53fb92e8a18f7db5d4/scrypt/src/params.rs#L14
 
 /// Creates a new JSON keystore using the [Scrypt](https://tools.ietf.org/html/rfc7914.html)
 /// key derivation function. The keystore is encrypted by a key derived from the provided `password`
@@ -117,7 +118,8 @@ where
             salt,
         } => {
             let mut key = vec![0u8; dklen as usize];
-            pbkdf2::<Hmac<Sha256>>(password.as_ref(), &salt, c, key.as_mut_slice());
+            pbkdf2::<Hmac<Sha256>>(password.as_ref(), &salt, c, key.as_mut_slice())
+                .expect("HMAC can be initialized with any key length"); // see https://github.com/RustCrypto/password-hashes/blob/165f4a8907354e89dbdc0cab0545f4d7fe8a89bd/pbkdf2/src/lib.rs#L160
             key
         }
         KdfparamsType::Scrypt {
@@ -131,7 +133,7 @@ where
             // TODO: use int_log https://github.com/rust-lang/rust/issues/70887
             // TODO: when it is stable
             let log_n = (n as f32).log2().ceil() as u8;
-            let scrypt_params = ScryptParams::new(log_n, r, p)?;
+            let scrypt_params = ScryptParams::new(log_n, r, p, DEFAULT_KDF_LEN)?;
             scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
             key
         }
@@ -204,6 +206,7 @@ where
         DEFAULT_KDF_PARAMS_LOG_N,
         DEFAULT_KDF_PARAMS_R,
         DEFAULT_KDF_PARAMS_P,
+        DEFAULT_KDF_LEN,
     )?;
     scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
 
