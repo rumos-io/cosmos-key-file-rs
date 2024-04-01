@@ -13,7 +13,7 @@ use rand::{CryptoRng, Rng};
 use scrypt::{scrypt, Params as ScryptParams};
 use sha2::Sha256;
 use sha3::Keccak256;
-use uuid::Uuid;
+use uuid::{Builder, Bytes, Uuid};
 
 use std::{
     fs::File,
@@ -198,6 +198,51 @@ where
     B: AsRef<[u8]>,
     S: AsRef<[u8]>,
 {
+    let (contents, id) = encrypt_key_string(rng, pk, password);
+
+    // If a file name is not specified for the keystore, simply use the stringified uuid.
+    let name = if let Some(name) = name {
+        name.to_string()
+    } else {
+        id.to_string()
+    };
+
+    // Create a file in write-only mode, to store the encrypted JSON keystore.
+    let mut file = File::create(dir.as_ref().join(name))?;
+    file.write_all(contents.as_bytes())?;
+
+    Ok(id.to_string())
+}
+
+/// Encrypts the given private key using the [Scrypt](https://tools.ietf.org/html/rfc7914.html)
+/// password-based key derivation function returning the encrypted JSON keystore as a string
+/// and the derived Uuid.
+///
+/// # Example
+///
+/// ```no_run
+/// use eth_keystore::encrypt_key_string;
+/// use rand::RngCore;
+/// use std::path::Path;
+/// use uuid::Uuid;
+///
+/// # async fn foobar() -> (String, Uuid) {
+/// let dir = Path::new("./keys");
+/// let mut rng = rand::thread_rng();
+///
+/// // Construct a 32-byte random private key.
+/// let mut private_key = vec![0u8; 32];
+/// rng.fill_bytes(private_key.as_mut_slice());
+///
+/// encrypt_key_string(&mut rng, &private_key, "keystore_password")
+/// # }
+/// ```
+pub fn encrypt_key_string<R, B, S>(rng: &mut R, pk: B, password: S) -> (String, Uuid)
+where
+    R: Rng + CryptoRng,
+    B: AsRef<[u8]>,
+    S: AsRef<[u8]>,
+{
     // Generate a random salt.
     let mut salt = vec![0u8; DEFAULT_KEY_SIZE];
     rng.fill_bytes(salt.as_mut_slice());
@@ -218,7 +263,7 @@ where
     let mut iv = vec![0u8; DEFAULT_IV_SIZE];
     rng.fill_bytes(iv.as_mut_slice());
 
-    let encryptor = Aes128Ctr::new(&key[..16], &iv[..16]).expect("hard coded lengths are valid");
+    let encryptor = Aes128Ctr::new(&key[..16], &iv[..16]).expect("invalid length");
 
     let mut ciphertext = pk.as_ref().to_vec();
     encryptor.apply_keystream(&mut ciphertext);
@@ -229,16 +274,14 @@ where
         .chain(&ciphertext)
         .finalize();
 
-    // If a file name is not specified for the keystore, simply use the stringified uuid.
-    let id = Uuid::new_v4();
-    let name = if let Some(name) = name {
-        name.to_string()
-    } else {
-        id.to_string()
-    };
+    // Use provided rng instead of Uuid::new_v4() so that the caller can control the randomness.
+    // This is useful for testing.
+    let mut raw_id: Bytes = [0u8; 16];
+    rng.fill_bytes(raw_id.as_mut_slice());
+    let id = Builder::from_random_bytes(raw_id).into_uuid();
 
-    // Construct and serialize the encrypted JSON keystore.
-    let keystore = EthKeystore {
+    // Construct and serialize the encrypted JSON key file.
+    let key_file = EthKeystore {
         id,
         version: 3,
         crypto: CryptoJson {
@@ -258,13 +301,11 @@ where
         #[cfg(feature = "geth-compat")]
         address: address_from_pk(&pk)?,
     };
-    let contents = serde_json::to_string(&keystore)?;
 
-    // Create a file in write-only mode, to store the encrypted JSON keystore.
-    let mut file = File::create(dir.as_ref().join(name))?;
-    file.write_all(contents.as_bytes())?;
-
-    Ok(id.to_string())
+    (
+        serde_json::to_string_pretty(&key_file).expect("serialization cannot fail"),
+        id,
+    )
 }
 
 struct Aes128Ctr {
