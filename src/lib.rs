@@ -51,7 +51,7 @@ const DEFAULT_KDF_LEN: usize = ScryptParams::RECOMMENDED_LEN; // This parameter 
 /// use eth_keystore::new;
 /// use std::path::Path;
 ///
-/// # async fn foobar() -> Result<(), Box<dyn std::error::Error>> {
+/// # fn foobar() -> Result<(), Box<dyn std::error::Error>> {
 /// let dir = Path::new("./keys");
 /// let mut rng = rand::thread_rng();
 /// // here `None` signifies we don't specify a filename for the keystore.
@@ -92,7 +92,7 @@ where
 /// use eth_keystore::decrypt_key;
 /// use std::path::Path;
 ///
-/// # async fn foobar() -> Result<(), Box<dyn std::error::Error>> {
+/// # fn foobar() -> Result<(), Box<dyn std::error::Error>> {
 /// let keypath = Path::new("./keys/my-key");
 /// let private_key = decrypt_key(&keypath, "password_to_keystore")?;
 /// # Ok(())
@@ -122,7 +122,7 @@ where
 /// use rand::RngCore;
 /// use std::path::Path;
 ///
-/// # async fn foobar() -> Result<(), Box<dyn std::error::Error>> {
+/// # fn foobar() -> Result<(), Box<dyn std::error::Error>> {
 /// let dir = Path::new("./keys");
 /// let mut rng = rand::thread_rng();
 ///
@@ -176,7 +176,7 @@ where
 /// use std::path::Path;
 /// use uuid::Uuid;
 ///
-/// # async fn foobar() -> (String, Uuid) {
+/// # fn foobar() -> (String, Uuid) {
 /// let dir = Path::new("./keys");
 /// let mut rng = rand::thread_rng();
 ///
