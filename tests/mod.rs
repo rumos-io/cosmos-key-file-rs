@@ -1,4 +1,4 @@
-use eth_keystore::{decrypt_key, encrypt_key, encrypt_key_string, new};
+use eth_keystore::{decrypt_key, decrypt_key_string, encrypt_key, encrypt_key_string, new};
 use hex::FromHex;
 use std::path::Path;
 
@@ -110,5 +110,40 @@ mod tests {
         print!("{encrypted}");
 
         assert_eq!(encrypted, expected)
+    }
+
+    #[test]
+    fn decrypt_key_string_works() {
+        let secret =
+            Vec::from_hex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")
+                .unwrap();
+
+        let keystore = r#"{
+            "crypto": {
+              "cipher": "aes-128-ctr",
+              "cipherparams": {
+                "iv": "117be1de549d1d4322c4711f11efa0c5"
+              },
+              "ciphertext": "4ca41bc2454c796eb33251aac626de8dba874aa044587be2fe81d811b87a890f",
+              "kdf": "scrypt",
+              "kdfparams": {
+                "dklen": 32,
+                "n": 8192,
+                "p": 1,
+                "r": 8,
+                "salt": "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95"
+              },
+              "mac": "6133bbc16f20d3866421bb8144d076d66b1f788139c91e047c7794baf26de2e0"
+            },
+            "id": "13790312-4f85-4c37-8761-ffc91ace30cb",
+            "version": 3
+          }"#;
+
+        let password = "newpassword";
+
+        let encrypted =
+            decrypt_key_string(keystore, password).expect("hard coded test should work");
+
+        assert_eq!(encrypted, secret);
     }
 }

@@ -107,58 +107,8 @@ where
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    let keystore: EthKeystore = serde_json::from_str(&contents)?;
 
-    // Derive the key.
-    let key = match keystore.crypto.kdfparams {
-        KdfparamsType::Pbkdf2 {
-            c,
-            dklen,
-            prf: _,
-            salt,
-        } => {
-            let mut key = vec![0u8; dklen as usize];
-            pbkdf2::<Hmac<Sha256>>(password.as_ref(), &salt, c, key.as_mut_slice())
-                .expect("HMAC can be initialized with any key length"); // see https://github.com/RustCrypto/password-hashes/blob/165f4a8907354e89dbdc0cab0545f4d7fe8a89bd/pbkdf2/src/lib.rs#L160
-            key
-        }
-        KdfparamsType::Scrypt {
-            dklen,
-            n,
-            p,
-            r,
-            salt,
-        } => {
-            let mut key = vec![0u8; dklen as usize];
-            // TODO: use int_log https://github.com/rust-lang/rust/issues/70887
-            // TODO: when it is stable
-            let log_n = (n as f32).log2().ceil() as u8;
-            let scrypt_params = ScryptParams::new(log_n, r, p, DEFAULT_KDF_LEN)
-                .expect("hard coded values are valid");
-            scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())
-                .expect("key.len() > 0 && key.len() <= (2^32 - 1) * 32");
-            key
-        }
-    };
-
-    // Derive the MAC from the derived key and ciphertext.
-    let derived_mac = Keccak256::new()
-        .chain(&key[16..32])
-        .chain(&keystore.crypto.ciphertext)
-        .finalize();
-
-    if derived_mac.as_slice() != keystore.crypto.mac.as_slice() {
-        return Err(KeystoreError::MacMismatch);
-    }
-
-    // Decrypt the private key bytes using AES-128-CTR
-    let decryptor = Aes128Ctr::new(&key[..16], &keystore.crypto.cipherparams.iv[..16])
-        .expect("hard coded lengths are valid");
-
-    let mut pk = keystore.crypto.ciphertext;
-    decryptor.apply_keystream(&mut pk);
-
-    Ok(pk)
+    decrypt_key_string(&contents, password)
 }
 
 /// Encrypts the given private key using the [Scrypt](https://tools.ietf.org/html/rfc7914.html)
@@ -308,6 +258,78 @@ where
     )
 }
 
+/// Decrypts an encrypted JSON keystore from the provided `keystore` using the provided `password`.
+/// Decryption supports the [Scrypt](https://tools.ietf.org/html/rfc7914.html) and
+/// [PBKDF2](https://ietf.org/rfc/rfc2898.txt) key derivation functions.
+///
+/// # Example
+///
+/// ```no_run
+/// use eth_keystore::decrypt_key_string;
+///
+/// # fn foobar(keystore: &str) -> Result<(), Box<dyn std::error::Error>> {
+/// let private_key = decrypt_key_string(&keystore, "password_to_keystore")?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn decrypt_key_string<K, S>(keystore: K, password: S) -> Result<Vec<u8>, KeystoreError>
+where
+    K: AsRef<str>,
+    S: AsRef<[u8]>,
+{
+    let keystore: EthKeystore = serde_json::from_str(keystore.as_ref())?;
+
+    // Derive the key.
+    let key = match keystore.crypto.kdfparams {
+        KdfparamsType::Pbkdf2 {
+            c,
+            dklen,
+            prf: _,
+            salt,
+        } => {
+            let mut key = vec![0u8; dklen as usize];
+            pbkdf2::<Hmac<Sha256>>(password.as_ref(), &salt, c, key.as_mut_slice())
+                .expect("HMAC can be initialized with any key length"); // see https://github.com/RustCrypto/password-hashes/blob/165f4a8907354e89dbdc0cab0545f4d7fe8a89bd/pbkdf2/src/lib.rs#L160
+            key
+        }
+        KdfparamsType::Scrypt {
+            dklen,
+            n,
+            p,
+            r,
+            salt,
+        } => {
+            let mut key = vec![0u8; dklen as usize];
+            // TODO: use int_log https://github.com/rust-lang/rust/issues/70887
+            // TODO: when it is stable
+            let log_n = (n as f32).log2().ceil() as u8;
+            let scrypt_params = ScryptParams::new(log_n, r, p, DEFAULT_KDF_LEN)
+                .expect("hard coded values are valid");
+            scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())
+                .expect("key.len() > 0 && key.len() <= (2^32 - 1) * 32");
+            key
+        }
+    };
+
+    // Derive the MAC from the derived key and ciphertext.
+    let derived_mac = Keccak256::new()
+        .chain(&key[16..32])
+        .chain(&keystore.crypto.ciphertext)
+        .finalize();
+
+    if derived_mac.as_slice() != keystore.crypto.mac.as_slice() {
+        return Err(KeystoreError::MacMismatch);
+    }
+
+    // Decrypt the private key bytes using AES-128-CTR
+    let decryptor = Aes128Ctr::new(&key[..16], &keystore.crypto.cipherparams.iv[..16])
+        .expect("hard coded lengths are valid");
+
+    let mut pk = keystore.crypto.ciphertext;
+    decryptor.apply_keystream(&mut pk);
+
+    Ok(pk)
+}
 struct Aes128Ctr {
     inner: ctr::CtrCore<Aes128, ctr::flavors::Ctr128BE>,
 }
