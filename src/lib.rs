@@ -133,8 +133,10 @@ where
             // TODO: use int_log https://github.com/rust-lang/rust/issues/70887
             // TODO: when it is stable
             let log_n = (n as f32).log2().ceil() as u8;
-            let scrypt_params = ScryptParams::new(log_n, r, p, DEFAULT_KDF_LEN)?;
-            scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
+            let scrypt_params = ScryptParams::new(log_n, r, p, DEFAULT_KDF_LEN)
+                .expect("hard coded values are valid");
+            scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())
+                .expect("key.len() > 0 && key.len() <= (2^32 - 1) * 32");
             key
         }
     };
@@ -150,8 +152,8 @@ where
     }
 
     // Decrypt the private key bytes using AES-128-CTR
-    let decryptor =
-        Aes128Ctr::new(&key[..16], &keystore.crypto.cipherparams.iv[..16]).expect("invalid length");
+    let decryptor = Aes128Ctr::new(&key[..16], &keystore.crypto.cipherparams.iv[..16])
+        .expect("hard coded lengths are valid");
 
     let mut pk = keystore.crypto.ciphertext;
     decryptor.apply_keystream(&mut pk);
@@ -207,14 +209,16 @@ where
         DEFAULT_KDF_PARAMS_R,
         DEFAULT_KDF_PARAMS_P,
         DEFAULT_KDF_LEN,
-    )?;
-    scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
+    )
+    .expect("hard coded values are valid");
+    scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())
+        .expect("key.len() > 0 && key.len() <= (2^32 - 1) * 32");
 
     // Encrypt the private key using AES-128-CTR.
     let mut iv = vec![0u8; DEFAULT_IV_SIZE];
     rng.fill_bytes(iv.as_mut_slice());
 
-    let encryptor = Aes128Ctr::new(&key[..16], &iv[..16]).expect("invalid length");
+    let encryptor = Aes128Ctr::new(&key[..16], &iv[..16]).expect("hard coded lengths are valid");
 
     let mut ciphertext = pk.as_ref().to_vec();
     encryptor.apply_keystream(&mut ciphertext);
@@ -225,7 +229,7 @@ where
         .chain(&ciphertext)
         .finalize();
 
-    // If a file name is not specified for the keystore, simply use the strigified uuid.
+    // If a file name is not specified for the keystore, simply use the stringified uuid.
     let id = Uuid::new_v4();
     let name = if let Some(name) = name {
         name.to_string()
@@ -269,8 +273,8 @@ struct Aes128Ctr {
 
 impl Aes128Ctr {
     fn new(key: &[u8], iv: &[u8]) -> Result<Self, cipher::InvalidLength> {
-        let cipher = aes::Aes128::new_from_slice(key).unwrap();
-        let inner = ctr::CtrCore::inner_iv_slice_init(cipher, iv).unwrap();
+        let cipher = aes::Aes128::new_from_slice(key)?;
+        let inner = ctr::CtrCore::inner_iv_slice_init(cipher, iv)?;
         Ok(Self { inner })
     }
 
